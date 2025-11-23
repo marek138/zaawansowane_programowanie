@@ -1,1 +1,1 @@
-wersja z gałęzi test
+wersja z rozwiązanym konfliktem
