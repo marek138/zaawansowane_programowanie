@@ -1,24 +1,22 @@
-import csv
-import os
+import sqlite3
 
 
 def add_tasks(count):
-    file_exists = os.path.isfile('queue.csv')
+    conn = sqlite3.connect('queue.db')
+    cursor = conn.cursor()
 
-    with open('queue.csv', mode='a', newline='') as file:
-        writer = csv.writer(file)
-        if not file_exists:
-            writer.writerow(['id', 'status'])
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            status TEXT NOT NULL
+        )
+    ''')
 
-        last_id = 0
-        if file_exists:
-            with open('queue.csv', mode='r') as f:
-                lines = f.readlines()
-                if len(lines) > 1:
-                    last_id = int(lines[-1].split(',')[0])
+    tasks = [('pending',) for _ in range(count)]
+    cursor.executemany('INSERT INTO tasks (status) VALUES (?)', tasks)
 
-        for i in range(1, count + 1):
-            writer.writerow([last_id + i, 'pending'])
+    conn.commit()
+    conn.close()
 
 
 if __name__ == "__main__":

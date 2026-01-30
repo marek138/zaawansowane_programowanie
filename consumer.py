@@ -1,57 +1,45 @@
-import csv
+import sqlite3
 import time
-import os
-
-FILE_NAME = 'queue.csv'
 
 
 def get_and_lock_task():
-    if not os.path.exists(FILE_NAME):
-        return None
+    conn = sqlite3.connect('queue.db')
+    cursor = conn.cursor()
 
-    rows = []
-    task_to_do = None
+    cursor.execute('BEGIN IMMEDIATE')
 
-    with open(FILE_NAME, mode='r', newline='') as file:
-        reader = list(csv.reader(file))
-        if not reader:
-            return None
+    cursor.execute('''
+        SELECT id FROM tasks 
+        WHERE status = "pending" 
+        LIMIT 1
+    ''')
+    row = cursor.fetchone()
 
-        rows = reader
-        for row in rows[1:]:
-            if row[1] == 'pending':
-                row[1] = 'in_progress'
-                task_to_do = row
-                break
+    if row:
+        task_id = row[0]
+        cursor.execute('UPDATE tasks SET status = "in_progress" WHERE id = ?', (task_id,))
+        conn.commit()
+        conn.close()
+        return task_id
 
-    if task_to_do:
-        with open(FILE_NAME, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerows(rows)
-
-    return task_to_do
+    conn.rollback()
+    conn.close()
+    return None
 
 
 def complete_task(task_id):
-    rows = []
-    with open(FILE_NAME, mode='r', newline='') as file:
-        rows = list(csv.reader(file))
-        for row in rows:
-            if row[0] == str(task_id):
-                row[1] = 'done'
-                break
-
-    with open(FILE_NAME, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerows(rows)
+    conn = sqlite3.connect('queue.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE tasks SET status = "done" WHERE id = ?', (task_id,))
+    conn.commit()
+    conn.close()
 
 
 def run_consumer():
     while True:
-        task = get_and_lock_task()
+        task_id = get_and_lock_task()
 
-        if task:
-            task_id = task[0]
+        if task_id:
             print(f"Przetwarzanie zadania ID: {task_id}...")
             time.sleep(30)
             complete_task(task_id)
