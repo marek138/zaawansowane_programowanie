@@ -1,7 +1,32 @@
 version: '3.8'
+
 services:
   rabbitmq:
     image: rabbitmq:3-management
     ports:
       - "5672:5672"
       - "15672:15672"
+
+  service_a:
+    build: ./service_a
+    ports:
+      - "8001:8000"
+
+  service_b:
+    build: ./service_b
+    ports:
+      - "8002:8000"
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+
+  consumer_b:
+    build: ./service_b
+    command: python consumer.py
+    deploy:
+      replicas: 3
+    depends_on:
+      - rabbitmq
+      - service_a
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - SERVICE_A_URL=http://service_a:8000/results
