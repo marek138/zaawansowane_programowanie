@@ -1,53 +1,42 @@
-import sqlite3
+import pika
+import cv2
+import requests
+import numpy as np
 import time
 
 
-def get_and_lock_task():
-    conn = sqlite3.connect('queue.db')
-    cursor = conn.cursor()
+def detect_people(url):
+    try:
+        response = requests.get(url, timeout=10)
+        image_array = np.asarray(bytearray(response.content), dtype=np.uint8)
+        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
-    cursor.execute('BEGIN IMMEDIATE')
+        hog = cv2.HOGDescriptor()
+        hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
-    cursor.execute('''
-        SELECT id FROM tasks 
-        WHERE status = "pending" 
-        LIMIT 1
-    ''')
-    row = cursor.fetchone()
-
-    if row:
-        task_id = row[0]
-        cursor.execute('UPDATE tasks SET status = "in_progress" WHERE id = ?', (task_id,))
-        conn.commit()
-        conn.close()
-        return task_id
-
-    conn.rollback()
-    conn.close()
-    return None
+        boxes, weights = hog.detectMultiScale(image, winStride=(8, 8))
+        return len(boxes)
+    except:
+        return 0
 
 
-def complete_task(task_id):
-    conn = sqlite3.connect('queue.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE tasks SET status = "done" WHERE id = ?', (task_id,))
-    conn.commit()
-    conn.close()
+def callback(ch, method, properties, body):
+    url = body.decode()
+    print(f"Rozpoczęto analizę: {url}")
+
+    count = detect_people(url)
+
+    print(f"Wynik dla {url}: znaleziono {count} osób")
+
+    # Tutaj można dodać zapis wyniku do bazy (np. SQLite z poprzedniego zadania)
+    ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
-def run_consumer():
-    while True:
-        task_id = get_and_lock_task()
+connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+channel = connection.channel()
+channel.queue_declare(queue='image_queue', durable=True)
+channel.basic_qos(prefetch_count=1)
+channel.basic_consume(queue='image_queue', on_message_callback=callback)
 
-        if task_id:
-            print(f"Przetwarzanie zadania ID: {task_id}...")
-            time.sleep(30)
-            complete_task(task_id)
-            print(f"Zakończono zadanie ID: {task_id}")
-        else:
-            print("Brak zadań. Czekam...")
-            time.sleep(5)
-
-
-if __name__ == "__main__":
-    run_consumer()
+print("Konsument uruchomiony. Oczekiwanie na zadania...")
+channel.start_consuming()
