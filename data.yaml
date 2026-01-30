@@ -1,0 +1,7 @@
+
+path: C:\Users\mszaf\PycharmProjects\dobre_praktyki_programowania\dataset_yolo 
+train: train/images
+val: val/images
+
+names:
+  0: license_plate
